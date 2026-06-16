@@ -7,6 +7,10 @@ map("n", "<Esc>", "<cmd>nohlsearch<CR>", { desc = "Clear search highlight" })
 -- Save with <leader>s
 map("n", "<leader>s", "<cmd>w<CR>", { desc = "Save file" })
 
+-- Jumplist navigation (back/forward through jumps, e.g. after go-to-definition).
+map("n", "<leader>[", "<C-o>", { desc = "Jump back" })
+map("n", "<leader>]", "<C-i>", { desc = "Jump forward" })
+
 -- Window navigation with <C-hjkl>
 map("n", "<C-h>", "<C-w>h", { desc = "Go to left window" })
 map("n", "<C-j>", "<C-w>j", { desc = "Go to lower window" })
