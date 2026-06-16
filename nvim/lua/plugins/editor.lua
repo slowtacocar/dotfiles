@@ -14,7 +14,7 @@ return {
         { "<leader>b", group = "buffer" },
         { "<leader>c", group = "code" },
         { "<leader>t", group = "toggle" },
-        { "<leader>s", group = "session" },
+        { "<leader>S", group = "session" },
       },
     },
   },

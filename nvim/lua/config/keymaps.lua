@@ -4,6 +4,9 @@ local map = vim.keymap.set
 -- Clear search highlight with <Esc>
 map("n", "<Esc>", "<cmd>nohlsearch<CR>", { desc = "Clear search highlight" })
 
+-- Save with <leader>s
+map("n", "<leader>s", "<cmd>w<CR>", { desc = "Save file" })
+
 -- Window navigation with <C-hjkl>
 map("n", "<C-h>", "<C-w>h", { desc = "Go to left window" })
 map("n", "<C-j>", "<C-w>j", { desc = "Go to lower window" })
