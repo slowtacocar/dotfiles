@@ -10,6 +10,8 @@ return {
     { "<S-h>", "<cmd>BufferLineCyclePrev<cr>", desc = "Previous buffer" },
     { "]b", "<cmd>BufferLineCycleNext<cr>", desc = "Next buffer" },
     { "[b", "<cmd>BufferLineCyclePrev<cr>", desc = "Previous buffer" },
+    { "<leader>]", "<cmd>BufferLineCycleNext<cr>", desc = "Next buffer" },
+    { "<leader>[", "<cmd>BufferLineCyclePrev<cr>", desc = "Previous buffer" },
     -- Reorder the current buffer.
     { "<S-Right>", "<cmd>BufferLineMoveNext<cr>", desc = "Move buffer right" },
     { "<S-Left>", "<cmd>BufferLineMovePrev<cr>", desc = "Move buffer left" },
