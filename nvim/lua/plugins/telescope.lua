@@ -14,7 +14,14 @@ return {
   keys = {
     { "<leader>ff", "<cmd>Telescope find_files<CR>", desc = "Find files" },
     { "<leader>fg", "<cmd>Telescope live_grep<CR>", desc = "Grep (live)" },
-    { "<leader>fb", "<cmd>Telescope buffers<CR>", desc = "Find buffers" },
+    -- Buffers in most-recently-used order (current excluded) — the "stack".
+    {
+      "<leader>fb",
+      function()
+        require("telescope.builtin").buffers({ sort_mru = true, ignore_current_buffer = true })
+      end,
+      desc = "Buffers (recent first)",
+    },
     { "<leader>fh", "<cmd>Telescope help_tags<CR>", desc = "Find help" },
     { "<leader>fr", "<cmd>Telescope oldfiles<CR>", desc = "Recent files" },
     { "<leader>fw", "<cmd>Telescope grep_string<CR>", desc = "Grep word under cursor" },
