@@ -16,5 +16,22 @@ return {
       pattern = "PersistenceSavePre",
       callback = function() pcall(vim.cmd, "NvimTreeClose") end,
     })
+    -- ...and reopen it after a session loads (keeping focus in the editor).
+    vim.api.nvim_create_autocmd("User", {
+      pattern = "PersistenceLoadPost",
+      callback = function()
+        vim.schedule(function()
+          local ok, api = pcall(require, "nvim-tree.api")
+          if not ok then return end
+          api.tree.open()
+          for _, w in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+            if vim.bo[vim.api.nvim_win_get_buf(w)].ft ~= "NvimTree" then
+              vim.api.nvim_set_current_win(w)
+              return
+            end
+          end
+        end)
+      end,
+    })
   end,
 }
