@@ -11,12 +11,9 @@ return {
   },
   config = function(_, opts)
     require("persistence").setup(opts)
-    -- Close the file tree before saving so it doesn't restore as a broken pane.
-    vim.api.nvim_create_autocmd("User", {
-      pattern = "PersistenceSavePre",
-      callback = function() pcall(vim.cmd, "NvimTreeClose") end,
-    })
-    -- ...and reopen it after a session loads (keeping focus in the editor).
+    -- Sessions don't store the nvim-tree window (mksession drops it), so a
+    -- restore replaces the layout with one that has no tree. Reopen it after a
+    -- session loads, keeping focus in the editor.
     vim.api.nvim_create_autocmd("User", {
       pattern = "PersistenceLoadPost",
       callback = function()
