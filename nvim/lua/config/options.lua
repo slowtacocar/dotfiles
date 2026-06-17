@@ -4,6 +4,7 @@ local opt = vim.opt
 -- Mouse support (requested): enable in all modes, right-click extends selection.
 opt.mouse = "a"
 opt.mousemodel = "extend"
+opt.mousescroll = "ver:1,hor:6" -- mouse wheel scrolls 1 line at a time (default 3)
 
 -- UI
 opt.number = true
