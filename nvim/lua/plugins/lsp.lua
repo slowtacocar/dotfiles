@@ -36,12 +36,12 @@ return {
       })
     end
 
-    -- TypeScript / JavaScript: tsgo (TypeScript-Go native preview).
-    -- oxlint: fast linter providing diagnostics + fix code-actions.
-    -- (oxlint only attaches when a project has an oxlint/package.json config.)
-    file_only("tsgo")
-    file_only("oxlint")
-    vim.lsp.enable({ "tsgo", "oxlint" })
+    -- TS/JS: tsgo (types) + oxlint (lint/fix). Python: ty (types) + ruff (lint/fix).
+    local servers = { "tsgo", "oxlint", "ruff", "ty" }
+    for _, s in ipairs(servers) do
+      file_only(s)
+    end
+    vim.lsp.enable(servers)
 
     -- Diagnostics presentation.
     vim.diagnostic.config({

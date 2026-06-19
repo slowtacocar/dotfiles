@@ -60,6 +60,8 @@ return {
         yaml = { "oxfmt" },
         graphql = { "oxfmt" },
         markdown = { "oxfmt" },
+        -- Python: sort imports then format, both via ruff.
+        python = { "ruff_organize_imports", "ruff_format" },
       },
       -- Define the oxfmt formatter (not yet a conform built-in): pipe via stdin.
       formatters = {
