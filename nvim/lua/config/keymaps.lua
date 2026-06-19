@@ -62,6 +62,27 @@ map("v", ">", ">gv", { desc = "Indent right" })
 -- Buffers: cycling keys live in plugins/bufferline.lua (visual tab order) and
 -- the layout-preserving delete keys live in plugins/editor.lua (mini.bufremove).
 
+-- Reopen the last closed file (like Ctrl+Shift+T). Track closed real files on a
+-- stack and pop the most recent back open.
+local closed_files = {}
+vim.api.nvim_create_autocmd("BufDelete", {
+  group = vim.api.nvim_create_augroup("reopen-closed", { clear = true }),
+  callback = function(args)
+    local name = vim.api.nvim_buf_get_name(args.buf)
+    if name ~= "" and vim.bo[args.buf].buftype == "" and vim.fn.filereadable(name) == 1 then
+      closed_files[#closed_files + 1] = name
+    end
+  end,
+})
+map("n", "<leader>bt", function()
+  local f = table.remove(closed_files)
+  if f then
+    vim.cmd("edit " .. vim.fn.fnameescape(f))
+  else
+    vim.notify("No recently closed files", vim.log.levels.INFO)
+  end
+end, { desc = "Reopen last closed file" })
+
 -- Diagnostics (LSP) quickfix navigation
 map("n", "[d", function() vim.diagnostic.jump({ count = -1 }) end, { desc = "Previous diagnostic" })
 map("n", "]d", function() vim.diagnostic.jump({ count = 1 }) end, { desc = "Next diagnostic" })
