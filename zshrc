@@ -421,7 +421,7 @@ portless-open() {
   echo "opening $url"
   open "$url"
 }
-backoffice() { portless-open support-portal }
+bo() { portless-open support-portal }
 portal()     { portless-open customer-portal }
 checkout()   { portless-open customer-checkout }
 
