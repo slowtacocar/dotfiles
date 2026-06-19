@@ -7,6 +7,9 @@ map("n", "<Esc>", "<cmd>nohlsearch<CR>", { desc = "Clear search highlight" })
 -- Save with <leader>s
 map("n", "<leader>s", "<cmd>w<CR>", { desc = "Save file" })
 
+-- Select the whole buffer
+map("n", "<leader>a", "ggVG", { desc = "Select all" })
+
 -- Jumplist navigation (back/forward through jumps, e.g. after go-to-definition).
 map("n", "<leader>[", "<C-o>", { desc = "Jump back" })
 map("n", "<leader>]", "<C-i>", { desc = "Jump forward" })
