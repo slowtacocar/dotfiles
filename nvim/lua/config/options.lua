@@ -30,6 +30,7 @@ opt.expandtab = true
 opt.shiftwidth = 2
 opt.tabstop = 2
 opt.softtabstop = 2
+opt.autoindent = true -- keep the previous line's indent on <CR>
 opt.smartindent = true
 opt.breakindent = true
 
