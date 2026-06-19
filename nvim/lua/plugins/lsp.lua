@@ -38,22 +38,11 @@ return {
 
     -- TS/JS: tsgo (types) + oxlint (lint/fix) + oxfmt (format).
     -- Python: ty (types) + ruff (lint/fix/format).
-    for _, s in ipairs({ "tsgo", "oxlint", "ruff", "ty" }) do
+    -- oxfmt keeps its shipped behavior (workspace_required: attaches only when
+    -- it finds an oxfmt config — which this user always has).
+    for _, s in ipairs({ "tsgo", "oxlint", "ruff", "ty", "oxfmt" }) do
       file_only(s)
     end
-    -- oxfmt's shipped config only attaches when it finds an oxfmt config file;
-    -- make it attach in any JS/TS project (it formats fine with defaults), while
-    -- still skipping non-file (e.g. diffview) buffers.
-    vim.lsp.config("oxfmt", {
-      workspace_required = false,
-      root_dir = function(bufnr, on_dir)
-        local name = vim.api.nvim_buf_get_name(bufnr)
-        if name == "" or name:find("://", 1, true) then
-          return
-        end
-        on_dir(vim.fs.root(bufnr, { "package.json", ".git" }) or vim.fs.dirname(name))
-      end,
-    })
     vim.lsp.enable({ "tsgo", "oxlint", "ruff", "ty", "oxfmt" })
 
     -- Format + fix on save through the already-running servers (no per-save
