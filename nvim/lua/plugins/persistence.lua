@@ -4,6 +4,22 @@ return {
   "folke/persistence.nvim",
   event = "VeryLazy",
   opts = {},
+  init = function()
+    -- Auto-restore the session for the cwd on a bare `nvim` launch.
+    vim.api.nvim_create_autocmd("StdinReadPre", {
+      group = vim.api.nvim_create_augroup("persistence-autoload", { clear = true }),
+      callback = function() vim.g._persistence_stdin = true end,
+    })
+    vim.api.nvim_create_autocmd("VimEnter", {
+      group = "persistence-autoload",
+      nested = true, -- let restored buffers trigger filetype/LSP/treesitter
+      callback = function()
+        -- Skip if launched with a file/dir arg or reading piped stdin.
+        if vim.g._persistence_stdin or vim.fn.argc() > 0 then return end
+        require("persistence").load() -- no-op if no saved session for this dir
+      end,
+    })
+  end,
   keys = {
     { "<leader>Sr", function() require("persistence").load() end, desc = "Restore session (this dir)" },
     { "<leader>Sl", function() require("persistence").load({ last = true }) end, desc = "Restore last session" },
