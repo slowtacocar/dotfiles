@@ -74,7 +74,7 @@ vim.api.nvim_create_autocmd("BufDelete", {
     end
   end,
 })
-map("n", "<leader>T", function()
+map("n", "<leader>bt", function()
   local f = table.remove(closed_files)
   if f then
     vim.cmd("edit " .. vim.fn.fnameescape(f))

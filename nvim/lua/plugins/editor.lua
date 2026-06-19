@@ -34,11 +34,12 @@ return {
     },
   },
 
-  -- Auto-insert matching brackets/quotes.
+  -- Auto-insert matching brackets/quotes, and split a pair across lines when
+  -- you press <CR> inside it (e.g. `(` + Enter -> open / indented blank / close).
   {
-    "echasnovski/mini.pairs",
+    "windwp/nvim-autopairs",
     event = "InsertEnter",
-    opts = {},
+    opts = { check_ts = true }, -- treesitter-aware (don't pair inside strings, etc.)
   },
 
   -- Add/change/delete surrounding pairs (parens, quotes, tags, ...).
