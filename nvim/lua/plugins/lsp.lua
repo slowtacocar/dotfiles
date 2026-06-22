@@ -148,6 +148,13 @@ return {
         if client and client.name == "oxlint" then
           map("<leader>cF", "<cmd>LspOxlintFixAll<CR>", "oxlint: fix all")
         end
+
+        -- ty's semantic tokens repaint strings and override treesitter
+        -- highlighting (incl. embedded SQL), so disable them — treesitter owns
+        -- highlighting; ty still does type-checking/diagnostics/hover.
+        if client and client.name == "ty" then
+          client.server_capabilities.semanticTokensProvider = nil
+        end
       end,
     })
   end,
