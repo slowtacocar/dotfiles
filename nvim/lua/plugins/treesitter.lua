@@ -9,9 +9,9 @@ return {
   opts = {
     ensure_installed = {
       "bash", "c", "css", "diff", "dockerfile", "git_config", "gitcommit",
-      "gitignore", "html", "javascript", "jsdoc", "json", "jsonc", "lua",
-      "luadoc", "markdown", "markdown_inline", "python", "query", "regex",
-      "toml", "tsx", "typescript", "vim", "vimdoc", "yaml",
+      "gitignore", "glimmer", "html", "javascript", "jsdoc", "json", "jsonc",
+      "lua", "luadoc", "markdown", "markdown_inline", "python", "query", "regex",
+      "sql", "toml", "tsx", "typescript", "vim", "vimdoc", "yaml",
     },
     auto_install = true, -- install parsers for new filetypes on the fly
     highlight = { enable = true },
