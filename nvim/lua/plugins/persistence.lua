@@ -34,16 +34,17 @@ return {
       pattern = "PersistenceLoadPost",
       callback = function()
         vim.schedule(function()
-          -- Restored buffers' FileType fired before the LSP config loaded, so
-          -- the servers never auto-attached. Re-fire FileType to attach them.
+          -- Buffers restored during the nested VimEnter session load come back
+          -- with no filetype set, so nothing (LSP, treesitter, ...) attaches.
+          -- Re-run filetype detection: it sets 'filetype' and fires FileType,
+          -- which triggers vim.lsp.enable's auto-attach and treesitter.
           for _, b in ipairs(vim.api.nvim_list_bufs()) do
             if
               vim.api.nvim_buf_is_loaded(b)
               and vim.bo[b].buftype == ""
-              and vim.bo[b].filetype ~= ""
-              and #vim.lsp.get_clients({ bufnr = b }) == 0
+              and vim.api.nvim_buf_get_name(b) ~= ""
             then
-              vim.api.nvim_buf_call(b, function() vim.cmd("doautocmd FileType") end)
+              vim.api.nvim_buf_call(b, function() vim.cmd("filetype detect") end)
             end
           end
           -- Reopen the file tree (keep focus in the editor).
