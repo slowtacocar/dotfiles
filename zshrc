@@ -160,7 +160,7 @@ merge() {
   _merge_tab() { printf '\033]0;%s\007' "$1" }
 
   echo "merge: waiting for ${#prs} PR(s) to merge…"
-  local entry remaining=("${prs[@]}") mss rd c_failed c_pending label summary
+  local entry remaining=("${prs[@]}") mss rd c_failed c_pending label summary base head behind
   local -a info
   typeset -A rebased
   while (( ${#remaining} )); do
@@ -168,7 +168,7 @@ merge() {
     still=(); parts=()
     for entry in "${remaining[@]}"; do
       dir="${entry%%:*}"; pr_num="${entry##*:}"; repo="${dir:t}"
-      info=("${(@f)$(cd "$dir" && gh pr view "$pr_num" --json state,mergeStateStatus,reviewDecision,statusCheckRollup -q '
+      info=("${(@f)$(cd "$dir" && gh pr view "$pr_num" --json state,mergeStateStatus,reviewDecision,statusCheckRollup,baseRefName,headRefName -q '
         .state,
         (.mergeStateStatus // ""),
         (.reviewDecision // ""),
@@ -176,9 +176,22 @@ merge() {
         ([.statusCheckRollup[]? | select(
             (.status != null and .status != "COMPLETED")
             or (.state == "PENDING" or .state == "EXPECTED")
-         )] | length)
+         )] | length),
+        .baseRefName,
+        .headRefName
       ' 2>/dev/null)}")
       state="${info[1]}"; mss="${info[2]}"; rd="${info[3]}"; c_failed="${info[4]:-0}"; c_pending="${info[5]:-0}"
+      base="${info[6]}"; head="${info[7]}"
+
+      # Is the branch actually out of date? GitHub's mergeStateStatus only ever
+      # reports ONE status, and BLOCKED/UNSTABLE (pending required checks, etc.)
+      # outrank BEHIND — so a PR can be behind its base while mss never says so.
+      # Check the real commit delta instead.
+      behind=0
+      if [[ -n "$base" && -n "$head" ]]; then
+        behind="$(cd "$dir" && gh api "repos/{owner}/{repo}/compare/${base}...${head}" --jq '.behind_by' 2>/dev/null)"
+        behind="${behind:-0}"
+      fi
 
       case "$state" in
         MERGED) echo "merge: $repo — PR #$pr_num merged"; continue ;;
@@ -191,21 +204,24 @@ merge() {
       elif [[ "$mss" == DIRTY ]];            then label="CONFLICTS"
       elif [[ "$rd"  == CHANGES_REQUESTED ]];then label="REVIEW-CHANGES-REQUESTED"
       elif [[ "$rd"  == REVIEW_REQUIRED ]];  then label="REVIEW-REQUIRED"
-      elif [[ "$mss" == BEHIND ]];           then label="rebasing"
+      elif (( behind > 0 ));                 then label="rebasing"
       elif (( c_pending > 0 ));              then label="checks-pending"
       elif [[ "$mss" == BLOCKED ]];          then label="BLOCKED"
       elif [[ "$mss" == CLEAN || "$mss" == UNSTABLE || "$mss" == HAS_HOOKS ]]; then label="ready"
       else                                        label="${(L)mss:-unknown}"
       fi
 
-      if [[ "$mss" == BEHIND && -z "${rebased[$entry]}" ]]; then
-        echo "merge: $repo — PR #$pr_num behind base, rebasing"
+      # Rebase whenever the branch is behind its base — but not on real merge
+      # conflicts (DIRTY), where `git rebase` would stop half-done. The `rebased`
+      # flag debounces so we don't re-rebase every poll while GitHub catches up.
+      if (( behind > 0 )) && [[ "$mss" != DIRTY && -z "${rebased[$entry]}" ]]; then
+        echo "merge: $repo — PR #$pr_num behind base by $behind, rebasing"
         if (cd "$dir" && eval rebase >/dev/null 2>&1); then
           rebased[$entry]=1
         else
           echo "merge: $repo — rebase failed (manual rebase needed)"
         fi
-      elif [[ "$mss" != BEHIND ]]; then
+      elif (( behind == 0 )); then
         unset "rebased[$entry]"
       fi
 
