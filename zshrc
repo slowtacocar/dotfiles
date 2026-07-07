@@ -256,6 +256,55 @@ _wt_add() {
   git -C "$src" worktree add -b "$branch" "$wt" "$base" || { echo "wt: worktree failed (${src:t})"; return 1; }
 }
 
+# _wt_session <name> <dest>: build the detached tmux dev session for an existing
+#   worktree dir, inferring the layout from what's on disk. Shared by `wt`
+#   (fresh worktree) and `wtr` (restart an existing one).
+_wt_session() {
+  emulate -L zsh
+  local name="$1" dest="$2"
+
+  if [[ -d "$dest/api" && -d "$dest/ship" ]]; then
+    ###### default: api + ship ######
+    tmux new-session -d -s "$name" -n shell -c "$dest"
+    tmux new-window     -t "$name" -n api   -c "$dest/api"
+    tmux send-keys      -t "${name}:api"  'bun install && bun migration:run && bun run start:dev-fastest:portless' C-m
+    tmux new-window     -t "$name" -n ship  -c "$dest/ship"
+    tmux send-keys      -t "${name}:ship" 'bun install && bun run dev:all:portless' C-m
+    tmux select-window  -t "${name}:shell"
+    echo "wt: api -> https://$name.api.localhost"
+  elif [[ -d "$dest/cxp" ]]; then
+    ###### single repo: cxp ######
+    local wt="$dest/cxp"
+    tmux new-session -d -s "$name" -n shell -c "$wt"
+    # cxp is one workspace -- `bun install` from any subfolder installs the whole
+    # repo. So install ONCE (in the first existing subfolder's tab) and have the
+    # other tab wait for it to finish, then both run `bun dev`. The flag lives
+    # outside the worktree so `pr`'s `git add -A` never picks it up. Clear any
+    # stale flag first so a restart re-coordinates the fresh install.
+    local subs=(frontend api) sub installer="" flag="$dest/.cxp-installed"
+    rm -f "$flag"
+    for sub in $subs; do [[ -d "$wt/$sub" ]] && { installer="$sub"; break; }; done
+    for sub in $subs; do
+      if [[ ! -d "$wt/$sub" ]]; then
+        echo "wt: warning: cxp/$sub not found, skipping its tab"
+        continue
+      fi
+      tmux new-window -t "$name" -n "$sub" -c "$wt/$sub"
+      if [[ "$sub" == "$installer" ]]; then
+        tmux send-keys -t "${name}:${sub}" "bun install && touch '$flag' && bun dev" C-m
+      else
+        tmux send-keys -t "${name}:${sub}" "echo 'waiting for bun install...'; until [ -f '$flag' ]; do sleep 1; done; bun dev" C-m
+      fi
+    done
+    tmux select-window -t "${name}:shell"
+  else
+    ###### any other single repo: just a shell at the worktree ######
+    local wt
+    wt="$(find "$dest" -mindepth 1 -maxdepth 1 -type d ! -name '.*' | head -1)"
+    tmux new-session -d -s "$name" -n shell -c "${wt:-$dest}"
+  fi
+}
+
 # wt: spin up a fresh worktree dev env in a detached tmux session.
 #   - no args     -> api + ship: copies api/.env & ship apps/**/.env.local, rewrites
 #                    localhost:3000 -> the api portless url, then each repo runs
@@ -308,14 +357,8 @@ wt() {
       sed -i '' -E "s#https?://localhost:3000#$API_URL#g" "$f"
     done < <(find "$SHIP_WT/apps" -name .env.local -type f)
 
-    # tmux: install + dev server in each tab; land in a shell tab at the folder.
-    tmux new-session -d -s "$NAME" -n shell -c "$DEST"
-    tmux new-window     -t "$NAME" -n api   -c "$API_WT"
-    tmux send-keys      -t "${NAME}:api"  'bun install && bun migration:run && bun run start:dev-fastest:portless' C-m
-    tmux new-window     -t "$NAME" -n ship  -c "$SHIP_WT"
-    tmux send-keys      -t "${NAME}:ship" 'bun install && bun run dev:all:portless' C-m
-    tmux select-window  -t "${NAME}:shell"
-    echo "wt: api -> $API_URL"
+    # tmux: build the dev session (shared with `wtr`).
+    _wt_session "$NAME" "$DEST"
   else
     ###### single repo ######
     local SRC="$HOME/Desktop/repos/$repo_arg"
@@ -328,28 +371,8 @@ wt() {
       [[ -f "$SRC/frontend/.env.local" ]] && cp "$SRC/frontend/.env.local"  "$WT/frontend/.env.local"
     fi
 
-    tmux new-session -d -s "$NAME" -n shell -c "$WT"
-    if [[ "$repo_arg" == cxp ]]; then
-      # cxp is one workspace -- `bun install` from any subfolder installs the whole
-      # repo. So install ONCE (in the first existing subfolder's tab) and have the
-      # other tab wait for it to finish, then both run `bun dev`. The flag lives
-      # outside the worktree so `pr`'s `git add -A` never picks it up.
-      local subs=(frontend api) sub installer="" flag="$DEST/.cxp-installed"
-      for sub in $subs; do [[ -d "$WT/$sub" ]] && { installer="$sub"; break; }; done
-      for sub in $subs; do
-        if [[ ! -d "$WT/$sub" ]]; then
-          echo "wt: warning: $repo_arg/$sub not found, skipping its tab"
-          continue
-        fi
-        tmux new-window -t "$NAME" -n "$sub" -c "$WT/$sub"
-        if [[ "$sub" == "$installer" ]]; then
-          tmux send-keys -t "${NAME}:${sub}" "bun install && touch '$flag' && bun dev" C-m
-        else
-          tmux send-keys -t "${NAME}:${sub}" "echo 'waiting for bun install...'; until [ -f '$flag' ]; do sleep 1; done; bun dev" C-m
-        fi
-      done
-    fi
-    tmux select-window -t "${NAME}:shell"
+    # tmux: build the dev session (shared with `wtr`).
+    _wt_session "$NAME" "$DEST"
   fi
 
   # Leave the session running detached in the background; attach later with `wta $NAME`.
@@ -378,6 +401,35 @@ wta() {
   else
     tmux attach -t "$name"
   fi
+}
+
+# wtr <name>: (re)start the detached tmux dev session for an EXISTING worktree.
+#   For after a reboot / `tmux kill-server`, or when you killed just the session
+#   but kept the worktree. Rebuilds the same tabs `wt` would, inferring the
+#   layout from the worktree dir; does NOT touch git or env files.
+#   - wtr            -> derive the name from the worktree dir you're standing in
+#   - wtr wt-abc123  -> restart that worktree's session by name
+wtr() {
+  emulate -L zsh
+  local wt_root="$HOME/Desktop/repos/worktrees"
+  local name="$1"
+  if [[ -z "$name" ]]; then
+    if [[ "$PWD/" == "$wt_root/"* ]]; then
+      name="${PWD#$wt_root/}"; name="${name%%/*}"
+    else
+      echo "wtr: usage: wtr <wt-name>  (or run from inside a worktree)"; return 1
+    fi
+  fi
+  command -v tmux >/dev/null || { echo "wtr: tmux not installed"; return 1; }
+
+  local dest="$wt_root/$name"
+  [[ -d "$dest" ]] || { echo "wtr: no worktree dir '$dest'"; return 1; }
+  if tmux has-session -t "$name" 2>/dev/null; then
+    echo "wtr: session '$name' already running -- attach with: wta $name"; return 1
+  fi
+
+  _wt_session "$name" "$dest"
+  echo "wtr: session '$name' running in the background -- attach with: wta $name"
 }
 
 # wtd <name>: kill a wt-* worktree's tmux session and delete its directory.
