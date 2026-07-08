@@ -498,3 +498,4 @@ alias gdiff="git diff origin/HEAD"
 alias c="claude --dangerously-skip-permissions"
 alias cc="claude --dangerously-skip-permissions --continue"
 alias v=nvim
+alias cdr="cd ~/Desktop/repos && cd"
