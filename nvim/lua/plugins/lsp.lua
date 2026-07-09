@@ -155,6 +155,30 @@ return {
         if client and client.name == "ty" then
           client.server_capabilities.semanticTokensProvider = nil
         end
+
+        -- Highlight other references to the symbol under the cursor (like
+        -- VSCode). CursorHold fires after 'updatetime' (250ms); moving clears.
+        if client and client:supports_method("textDocument/documentHighlight") then
+          local hl = vim.api.nvim_create_augroup("user-lsp-doc-highlight-" .. bufnr, { clear = true })
+          vim.api.nvim_create_autocmd({ "CursorHold", "CursorHoldI" }, {
+            group = hl,
+            buffer = bufnr,
+            callback = vim.lsp.buf.document_highlight,
+          })
+          vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
+            group = hl,
+            buffer = bufnr,
+            callback = vim.lsp.buf.clear_references,
+          })
+          vim.api.nvim_create_autocmd("LspDetach", {
+            group = hl,
+            buffer = bufnr,
+            callback = function()
+              vim.lsp.buf.clear_references()
+              pcall(vim.api.nvim_del_augroup_by_id, hl)
+            end,
+          })
+        end
       end,
     })
   end,
