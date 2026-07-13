@@ -48,8 +48,8 @@ alias dbtf=/Users/bgeorge/.local/bin/dbt
 #   - for each repo: git add -A, commit (msg always "commit"), push
 #   - skips a repo with no changes (nothing ahead of its base branch)
 #   - if a repo has no open PR yet: uses the args as the PR title (or prompts ONCE if no args),
-#     creates the PR(s) with `gh pr create`, and opens the new one(s) in browser
-#   - if a PR already exists: just commits & pushes (no prompt, no browser)
+#     and creates the PR(s) with `gh pr create` (prints the URL, does not open a browser)
+#   - if a PR already exists: just commits & pushes (no prompt)
 pr() {
   emulate -L zsh
   command -v gh >/dev/null || { echo "pr: gh not installed (brew install gh)"; return 1; }
@@ -104,7 +104,6 @@ pr() {
   for dir in "${need_pr[@]}"; do
     if url="$(cd "$dir" && gh pr create --title "$title" --body "" 2>/dev/null)" && [[ "$url" == https://* ]]; then
       echo "pr: ${dir:t} — created $url"
-      open "$url"
     else
       echo "pr: ${dir:t} — gh pr create failed"
     fi
@@ -159,8 +158,12 @@ merge() {
   # running command — hence "merge").
   _merge_tab() { printf '\033]0;%s\007' "$1" }
 
+  # OSC 8 hyperlink: terminals that support it render $2 as a clickable link to
+  # $1; others just show the plain text. Trailing newline included.
+  _osc8() { printf '\033]8;;%s\033\\%s\033]8;;\033\\\n' "$1" "$2" }
+
   echo "merge: waiting for ${#prs} PR(s) to merge…"
-  local entry remaining=("${prs[@]}") mss rd c_failed c_pending label summary base head behind
+  local entry remaining=("${prs[@]}") mss rd c_failed c_pending label summary base head behind url
   local -a info
   typeset -A rebased
   while (( ${#remaining} )); do
@@ -168,7 +171,7 @@ merge() {
     still=(); parts=()
     for entry in "${remaining[@]}"; do
       dir="${entry%%:*}"; pr_num="${entry##*:}"; repo="${dir:t}"
-      info=("${(@f)$(cd "$dir" && gh pr view "$pr_num" --json state,mergeStateStatus,reviewDecision,statusCheckRollup,baseRefName,headRefName -q '
+      info=("${(@f)$(cd "$dir" && gh pr view "$pr_num" --json state,mergeStateStatus,reviewDecision,statusCheckRollup,baseRefName,headRefName,url -q '
         .state,
         (.mergeStateStatus // ""),
         (.reviewDecision // ""),
@@ -178,10 +181,11 @@ merge() {
             or (.state == "PENDING" or .state == "EXPECTED")
          )] | length),
         .baseRefName,
-        .headRefName
+        .headRefName,
+        .url
       ' 2>/dev/null)}")
       state="${info[1]}"; mss="${info[2]}"; rd="${info[3]}"; c_failed="${info[4]:-0}"; c_pending="${info[5]:-0}"
-      base="${info[6]}"; head="${info[7]}"
+      base="${info[6]}"; head="${info[7]}"; url="${info[8]}"
 
       # Is the branch actually out of date? GitHub's mergeStateStatus only ever
       # reports ONE status, and BLOCKED/UNSTABLE (pending required checks, etc.)
@@ -194,7 +198,7 @@ merge() {
       fi
 
       case "$state" in
-        MERGED) echo "merge: $repo — PR #$pr_num merged"; continue ;;
+        MERGED) _osc8 "$url" "merge: $repo — PR #$pr_num merged"; continue ;;
         CLOSED) echo "merge: $repo — PR #$pr_num closed without merging"; _merge_tab ""; return 1 ;;
       esac
 
