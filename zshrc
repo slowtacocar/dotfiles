@@ -48,7 +48,7 @@ alias dbtf=/Users/bgeorge/.local/bin/dbt
 #   - for each repo: git add -A, commit (msg always "commit"), push
 #   - skips a repo with no changes (nothing ahead of its base branch)
 #   - if a repo has no open PR yet: uses the args as the PR title (or prompts ONCE if no args),
-#     and creates the PR(s) with `gh pr create` (prints the URL, does not open a browser)
+#     and creates the PR(s) as drafts with `gh pr create --draft` (prints the URL, does not open a browser)
 #   - if a PR already exists: just commits & pushes (no prompt)
 pr() {
   emulate -L zsh
@@ -102,7 +102,7 @@ pr() {
 
   local url
   for dir in "${need_pr[@]}"; do
-    if url="$(cd "$dir" && gh pr create --title "$title" --body "" 2>/dev/null)" && [[ "$url" == https://* ]]; then
+    if url="$(cd "$dir" && gh pr create --draft --title "$title" --body "" 2>/dev/null)" && [[ "$url" == https://* ]]; then
       echo "pr: ${dir:t} — created $url"
     else
       echo "pr: ${dir:t} — gh pr create failed"
@@ -110,8 +110,8 @@ pr() {
   done
 }
 
-# merge: from inside a `wt` worktree, enable auto-merge on every repo's open PR,
-#   wait for them all to merge, then run `wtd` to tear the worktree down.
+# merge: from inside a `wt` worktree, mark every repo's open PR ready (undraft),
+#   enable auto-merge on each, wait for them all to merge, then run `wtd` to tear the worktree down.
 #   - merge method defaults to squash; pass --merge / --rebase / --squash to override
 merge() {
   emulate -L zsh
@@ -142,6 +142,8 @@ merge() {
       echo "merge: $repo — no open PR for $branch, skipping"
       continue
     fi
+
+    (cd "$dir" && gh pr ready "$pr_num" >/dev/null 2>&1) || true
 
     if (cd "$dir" && gh pr merge "$pr_num" --auto "$method" >/dev/null 2>&1); then
       echo "merge: $repo — auto-merge enabled on PR #$pr_num"
@@ -373,6 +375,10 @@ wt() {
       # cxp's gitignored env files live in subfolders -- copy them into the worktree.
       [[ -f "$SRC/api/.env" ]]            && cp "$SRC/api/.env"             "$WT/api/.env"
       [[ -f "$SRC/frontend/.env.local" ]] && cp "$SRC/frontend/.env.local"  "$WT/frontend/.env.local"
+      # Local auth keypair (JWKS + private key to mint session JWTs). Gitignored,
+      # lives at the repo root, so it doesn't travel with the worktree -- without
+      # it you can't sign a local login token. See api/README.md "Local auth-service JWTs".
+      [[ -d "$SRC/.context/auth" ]] && { mkdir -p "$WT/.context" && cp -R "$SRC/.context/auth" "$WT/.context/auth"; }
     fi
 
     # tmux: build the dev session (shared with `wtr`).
