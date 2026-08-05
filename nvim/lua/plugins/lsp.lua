@@ -17,7 +17,7 @@ return {
     -- debounce wins, so this must be global ("*") to actually take effect.
     vim.lsp.config("*", {
       capabilities = capabilities,
-      flags = { debounce_text_changes = 500 },
+      flags = { debounce_text_changes = 1000 },
     })
 
     -- Don't let servers attach to non-file buffers (e.g. diffview's
