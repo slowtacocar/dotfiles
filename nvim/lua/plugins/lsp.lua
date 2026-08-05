@@ -50,7 +50,41 @@ return {
     for _, s in ipairs({ "tsgo", "oxlint", "ruff", "ty", "oxfmt" }) do
       file_only(s)
     end
-    vim.lsp.enable({ "tsgo", "oxlint", "ruff", "ty", "oxfmt" })
+
+    -- dbt: the Fusion engine's language server, a subcommand of the CLI
+    -- (`dbt lsp`, stdio) rather than a separate binary. lspconfig ships no
+    -- definition for it, so declare it here.
+    --
+    -- Its root_dir is hand-rolled instead of going through file_only(): dbt
+    -- projects are usually nested (adl/dbt/dbt_project.yml, not the repo root)
+    -- and dbt_project.yml is the *only* sensible marker — there's no .git
+    -- fallback like ruff/ty have. file_only()'s fallback would then start the
+    -- server in the buffer's own directory for every stray .sql/.yaml on the
+    -- machine, where it has no project to parse. So: no project, no server.
+    -- --project-dir is REQUIRED, not a nicety: the server ignores rootUri and
+    -- workspaceFolders entirely. Without it dbt.getProjectInfo returns {} and
+    -- every request answers null, while still looking healthy in :LspInfo.
+    -- cmd is a function so each project gets its own root on the command line.
+    vim.lsp.config("dbt", {
+      cmd = function(dispatchers, config)
+        local cmd = { "dbt", "lsp", "--project-dir", config.root_dir }
+        -- append "--lint-enabled", "true" for the SQL linter (off by default)
+        return vim.lsp.rpc.start(cmd, dispatchers, { cwd = config.root_dir })
+      end,
+      filetypes = { "sql", "yaml" }, -- models and schema/source yml
+      root_dir = function(bufnr, on_dir)
+        local name = vim.api.nvim_buf_get_name(bufnr)
+        if name == "" or name:find("://", 1, true) then
+          return -- not a real file (see file_only above)
+        end
+        local root = vim.fs.root(bufnr, "dbt_project.yml")
+        if root then
+          on_dir(root)
+        end
+      end,
+    })
+
+    vim.lsp.enable({ "tsgo", "oxlint", "ruff", "ty", "oxfmt", "dbt" })
 
     -- Format + fix on save through the already-running servers (no per-save
     -- process spawn — replaces conform). Toggle with <leader>tf.

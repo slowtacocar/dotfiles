@@ -318,6 +318,7 @@ _wt_session() {
 #   - wt <repo>   -> a single worktree of ~/Desktop/repos/<repo>:
 #                       * cxp: `bun install && bun dev` in its frontend/ and api/
 #                              subfolders, each in its own tab.
+#                       * adl: copies the root repo's gitignored adl/dbt/.env in.
 #                       * any other repo: no setup, just the session.
 #   - always: new random-named folder (wt-*) under ~/Desktop/repos/worktrees, new branch
 #     named after the folder (off a freshly-fetched origin default). The tmux session is
@@ -345,10 +346,10 @@ wt() {
     _wt_add "$SHIP_SRC" "$SHIP_WT" "$NAME" main    || return 1
 
     # Copy gitignored env files (they don't travel with the worktree).
-    if [[ -f "$API_SRC/.env" ]]; then
+    if [[ -f "$API_SRC/.env.local" ]]; then
       cp "$API_SRC/.env.local" "$API_WT/.env"
     else
-      echo "wt: warning: $API_SRC/.env not found"
+      echo "wt: warning: $API_SRC/.env.local not found"
     fi
 
     local f rel
@@ -379,6 +380,13 @@ wt() {
       # lives at the repo root, so it doesn't travel with the worktree -- without
       # it you can't sign a local login token. See api/README.md "Local auth-service JWTs".
       [[ -d "$SRC/.context/auth" ]] && { mkdir -p "$WT/.context" && cp -R "$SRC/.context/auth" "$WT/.context/auth"; }
+    elif [[ "$repo_arg" == adl ]]; then
+      # adl's gitignored dbt .env -- copy it into the worktree.
+      if [[ -f "$SRC/adl/dbt/.env" ]]; then
+        mkdir -p "$WT/adl/dbt" && cp "$SRC/adl/dbt/.env" "$WT/adl/dbt/.env"
+      else
+        echo "wt: warning: $SRC/adl/dbt/.env not found"
+      fi
     fi
 
     # tmux: build the dev session (shared with `wtr`).
@@ -502,6 +510,13 @@ portless-open() {
 bo() { portless-open support-portal }
 portal()     { portless-open customer-portal }
 checkout()   { portless-open customer-checkout }
+
+adl() {
+  cd adl/dbt
+  SNOWFLAKE_SCHEMA=adl_dagster_prod dbt parse --target-path target/prod-state
+  dbt run --select $1 --defer --state target/prod-state
+  cd ../..
+}
 
 alias rebase="git fetch && git rebase origin/HEAD && git push --force-with-lease"
 alias gdiff="git diff origin/HEAD"
