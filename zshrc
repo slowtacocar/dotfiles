@@ -43,6 +43,21 @@ fi
 # Added by dbt Fusion extension
 alias dbtf=/Users/bgeorge/.local/bin/dbt
 
+# _base_ref <repo-dir> <repo-name> [fallback]
+# The branch a repo's work should branch off and PR back into. api and ship both
+# ship off `develop`, so pin them explicitly rather than trusting origin/HEAD
+# (ship's still points at main). Everything else follows origin/HEAD, falling
+# back to origin/<fallback> when the remote head isn't set locally.
+_base_ref() {
+  emulate -L zsh
+  local dir="$1" repo="$2" fallback="${3:-main}" base
+  case "$repo" in
+    api|ship) echo "origin/develop"; return 0 ;;
+  esac
+  base="$(git -C "$dir" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null)"
+  echo "${base:-origin/$fallback}"
+}
+
 # pr: from any subdir of a `wt` worktree, commit+push every repo in it and open PRs.
 #   - iterates each repo folder in the worktree root (api/ship, or cxp, or whatever)
 #   - for each repo: git add -A, commit (msg always "commit"), push
@@ -74,8 +89,7 @@ pr() {
     git -C "$dir" add -A
     git -C "$dir" diff --cached --quiet || git -C "$dir" commit -m "$commit_msg" >/dev/null
 
-    base="$(git -C "$dir" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null)"
-    [[ -z "$base" ]] && { [[ "$repo" == api ]] && base="origin/develop" || base="origin/main"; }
+    base="$(_base_ref "$dir" "$repo")"
     ahead="$(git -C "$dir" rev-list --count "${base}..HEAD" 2>/dev/null || echo 0)"
     if [[ "$ahead" == 0 ]]; then
       echo "pr: $repo — no changes, skipping"
@@ -102,7 +116,8 @@ pr() {
 
   local url
   for dir in "${need_pr[@]}"; do
-    if url="$(cd "$dir" && gh pr create --draft --title "$title" --body "" 2>/dev/null)" && [[ "$url" == https://* ]]; then
+    base="$(_base_ref "$dir" "${dir:t}")"
+    if url="$(cd "$dir" && gh pr create --draft --base "${base#origin/}" --title "$title" --body "" 2>/dev/null)" && [[ "$url" == https://* ]]; then
       echo "pr: ${dir:t} — created $url"
     else
       echo "pr: ${dir:t} — gh pr create failed"
@@ -221,8 +236,12 @@ merge() {
       # conflicts (DIRTY), where `git rebase` would stop half-done. The `rebased`
       # flag debounces so we don't re-rebase every poll while GitHub catches up.
       if (( behind > 0 )) && [[ "$mss" != DIRTY && -z "${rebased[$entry]}" ]]; then
-        echo "merge: $repo — PR #$pr_num behind base by $behind, rebasing"
-        if (cd "$dir" && eval rebase >/dev/null 2>&1); then
+        echo "merge: $repo — PR #$pr_num behind base by $behind, rebasing onto $base"
+        # Rebase onto the PR's real base, not the `rebase` alias's origin/HEAD —
+        # they differ wherever origin/HEAD lags the branch we actually PR into.
+        if (cd "$dir" && git fetch origin "$base" >/dev/null 2>&1 \
+              && git rebase "origin/$base" >/dev/null 2>&1 \
+              && git push --force-with-lease >/dev/null 2>&1); then
           rebased[$entry]=1
         else
           echo "merge: $repo — rebase failed (manual rebase needed)"
@@ -256,7 +275,7 @@ _wt_add() {
   emulate -L zsh
   local src="$1" wt="$2" branch="$3" fallback="$4" base
   [[ -d "$src/.git" ]] || { echo "wt: $src is not a git repo"; return 1; }
-  base="$(git -C "$src" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null)"; base="${base:-origin/$fallback}"
+  base="$(_base_ref "$src" "${src:t}" "$fallback")"
   echo "wt: ${src:t} <- fetching $base ..."
   git -C "$src" fetch origin "${base#origin/}"          || { echo "wt: fetch failed (${src:t})";    return 1; }
   git -C "$src" worktree add -b "$branch" "$wt" "$base" || { echo "wt: worktree failed (${src:t})"; return 1; }
@@ -343,7 +362,7 @@ wt() {
     local API_URL="https://$NAME.api.localhost"   # portless prepends the branch name in worktrees
 
     _wt_add "$API_SRC"  "$API_WT"  "$NAME" develop || return 1
-    _wt_add "$SHIP_SRC" "$SHIP_WT" "$NAME" main    || return 1
+    _wt_add "$SHIP_SRC" "$SHIP_WT" "$NAME" develop || return 1
 
     # Copy gitignored env files (they don't travel with the worktree).
     if [[ -f "$API_SRC/.env.local" ]]; then
