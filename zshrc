@@ -329,7 +329,7 @@ _wt_session() {
     # failed install leaves the shell -- and the session -- alive so you can
     # `wta` in and read the error.
     tmux new-session -d -s "$name" -n install -c "$dest/adl"
-    tmux send-keys   -t "${name}:install" 'uv venv && uv pip sync setup.py && exit' C-m
+    tmux send-keys   -t "${name}:install" 'uv venv && uv pip sync constraints-dev.txt && exit' C-m
     echo "wt: adl -> installing deps in the background; session '$name' ends when it finishes"
   else
     ###### any other single repo: just a shell at the worktree ######
