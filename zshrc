@@ -322,6 +322,15 @@ _wt_session() {
       fi
     done
     tmux select-window -t "${name}:shell"
+  elif [[ -d "$dest/adl" ]]; then
+    ###### single repo: adl -- one-shot dep install, no dev server ######
+    # Nothing to keep running afterwards, so the install tab `exit`s itself and
+    # the session (its only window) dies with it. `&&` not `;` on purpose: a
+    # failed install leaves the shell -- and the session -- alive so you can
+    # `wta` in and read the error.
+    tmux new-session -d -s "$name" -n install -c "$dest/adl"
+    tmux send-keys   -t "${name}:install" 'uv venv && uv pip sync setup.py && exit' C-m
+    echo "wt: adl -> installing deps in the background; session '$name' ends when it finishes"
   else
     ###### any other single repo: just a shell at the worktree ######
     local wt
@@ -337,7 +346,9 @@ _wt_session() {
 #   - wt <repo>   -> a single worktree of ~/Desktop/repos/<repo>:
 #                       * cxp: `bun install && bun dev` in its frontend/ and api/
 #                              subfolders, each in its own tab.
-#                       * adl: copies the root repo's gitignored adl/dbt/.env in.
+#                       * adl: copies the root repo's gitignored adl/dbt/.env in,
+#                              then `uv venv && uv pip sync setup.py` in a tmux tab
+#                              that exits (ending the session) once it's done.
 #                       * any other repo: no setup, just the session.
 #   - always: new random-named folder (wt-*) under ~/Desktop/repos/worktrees, new branch
 #     named after the folder (off a freshly-fetched origin default). The tmux session is
@@ -413,7 +424,10 @@ wt() {
   fi
 
   # Leave the session running detached in the background; attach later with `wta $NAME`.
-  echo "wt: session '$NAME' running in the background -- attach with: wta $NAME"
+  # (adl is the exception -- it self-terminates, and already printed its own note.)
+  if [[ "$repo_arg" != adl ]]; then
+    echo "wt: session '$NAME' running in the background -- attach with: wta $NAME"
+  fi
   cd "$DEST"
 }
 
