@@ -125,6 +125,15 @@ pr() {
   done
 }
 
+# Set the terminal window/tab title. OSC 0 sets both window and icon/tab title
+# (OSC 1 alone is ignored by many modern terminals, which fall back to showing the
+# running command — hence "merge").
+_wt_tab() { printf '\033]0;%s\007' "$1" }
+
+# OSC 8 hyperlink: terminals that support it render $2 as a clickable link to
+# $1; others just show the plain text. Trailing newline included.
+_osc8() { printf '\033]8;;%s\033\\%s\033]8;;\033\\\n' "$1" "$2" }
+
 # merge: from inside a `wt` worktree, mark every repo's open PR ready (undraft),
 #   enable auto-merge on each, wait for them all to merge, then run `wtd` to tear the worktree down.
 #   - merge method defaults to squash; pass --merge / --rebase / --squash to override
@@ -144,7 +153,7 @@ merge() {
     --merge|--rebase|--squash) method="$1" ;;
   esac
 
-  typeset -a prs
+  typeset -a prs cutover_repos
   local dir repo branch pr_num state
 
   while IFS= read -r dir; do
@@ -166,18 +175,11 @@ merge() {
       echo "merge: $repo — gh pr merge failed on PR #$pr_num"; return 1
     fi
     prs+=("$dir:$pr_num")
+    # Repos that PR into develop aren't live until develop lands on main — `cutover`.
+    [[ "$(_base_ref "$dir" "$repo")" == origin/develop ]] && cutover_repos+=("$repo")
   done < <(find "$root" -mindepth 1 -maxdepth 1 -type d | sort)
 
   (( ${#prs} )) || { echo "merge: no PRs to wait on"; return 1; }
-
-  # Set the terminal window/tab title. OSC 0 sets both window and icon/tab title
-  # (OSC 1 alone is ignored by many modern terminals, which fall back to showing the
-  # running command — hence "merge").
-  _merge_tab() { printf '\033]0;%s\007' "$1" }
-
-  # OSC 8 hyperlink: terminals that support it render $2 as a clickable link to
-  # $1; others just show the plain text. Trailing newline included.
-  _osc8() { printf '\033]8;;%s\033\\%s\033]8;;\033\\\n' "$1" "$2" }
 
   echo "merge: waiting for ${#prs} PR(s) to merge…"
   local entry remaining=("${prs[@]}") mss rd c_failed c_pending label summary base head behind url
@@ -216,7 +218,7 @@ merge() {
 
       case "$state" in
         MERGED) _osc8 "$url" "merge: $repo — PR #$pr_num merged"; continue ;;
-        CLOSED) echo "merge: $repo — PR #$pr_num closed without merging"; _merge_tab ""; return 1 ;;
+        CLOSED) echo "merge: $repo — PR #$pr_num closed without merging"; _wt_tab ""; return 1 ;;
       esac
 
       # Pick the single most actionable status to show.
@@ -256,15 +258,183 @@ merge() {
     remaining=("${still[@]}")
     if (( ${#remaining} )); then
       summary="merge ${parts[*]}"
-      _merge_tab "$summary"
+      _wt_tab "$summary"
       echo "merge: $summary"
       sleep 15
     fi
   done
 
-  _merge_tab ""
-  echo "merge: all PRs merged — running wtd"
-  wtd "$name"
+  if (( ${#cutover_repos} )); then
+    # Everything landed on develop, but nothing is live until develop lands on main.
+    # Tear the worktree down (its work is merged) and keep the shell so the cutover
+    # can be run from here.
+    _wt_tab "READY FOR CUTOVER: ${cutover_repos[*]}"
+    echo "merge: all PRs merged into develop — running wtd"
+    wtd --keep-shell "$name"
+    echo "merge: ready for cutover — run: cutover ${cutover_repos[*]}"
+  else
+    _wt_tab ""
+    echo "merge: all PRs merged — running wtd"
+    wtd "$name"
+  fi
+}
+
+# cutover <repo> [repo…]: promote develop -> main for a repo (e.g. `cutover api`,
+#   `cutover api ship`). Run it after `merge` has landed everything on develop.
+#   - reuses the open develop -> main PR if there is one, else opens it
+#   - if the diff has commits from anyone but slowtacocar, it does NOT merge: it makes
+#     sure a PR exists, prints its link so the diff can be reviewed, and stops. Rerun
+#     with -f to merge it anyway.
+#   - otherwise: enables auto-merge, waits for it to land, then exits the shell
+#   - merge method defaults to a merge commit (keeps develop and main identical);
+#     pass --merge / --rebase / --squash to override
+cutover() {
+  emulate -L zsh
+  command -v gh >/dev/null || { echo "cutover: gh not installed (brew install gh)"; return 1; }
+
+  local method="--merge" force=0
+  typeset -a repos
+  local arg
+  for arg in "$@"; do
+    case "$arg" in
+      --merge|--rebase|--squash) method="$arg" ;;
+      -f|--force) force=1 ;;
+      -*) echo "cutover: unknown flag $arg"; return 1 ;;
+      *) repos+=("$arg") ;;
+    esac
+  done
+  (( ${#repos} )) || { echo "cutover: usage: cutover [-f] <repo> [repo…]   (e.g. cutover api ship)"; return 1; }
+
+  typeset -a prs cmp blocked
+  local repo dir existing ahead authors url pr_num
+
+  for repo in "${repos[@]}"; do
+    dir="$HOME/Desktop/repos/$repo"
+    git -C "$dir" rev-parse --is-inside-work-tree >/dev/null 2>&1 \
+      || { echo "cutover: $repo — no git repo at $dir"; return 1 }
+
+    # Reuse an already-open develop -> main PR rather than trying to open a second one.
+    existing="$(cd "$dir" && gh pr list --base main --head develop --state open --json number,url -q '.[0:1][] | "\(.number)\t\(.url)"' 2>/dev/null)"
+    pr_num=""; url=""
+    if [[ -n "$existing" ]]; then
+      pr_num="${existing%%$'\t'*}"; url="${existing##*$'\t'}"
+    fi
+
+    # Compare on the remote (origin/main vs origin/develop), and collect the GitHub
+    # login of every commit in the diff — falling back to the git author name for
+    # commits GitHub can't map to an account.
+    cmp=("${(@f)$(cd "$dir" && gh api "repos/{owner}/{repo}/compare/main...develop" --jq '
+      .ahead_by,
+      ([.commits[]? | (.author.login // .commit.author.name)] | unique | join(", "))
+    ' 2>/dev/null)}")
+    ahead="${cmp[1]}"; authors="${cmp[2]}"
+    [[ "$ahead" == <-> ]] || { echo "cutover: $repo — couldn't compare main...develop"; return 1 }
+    if (( ahead == 0 )); then
+      echo "cutover: $repo — develop has nothing for main"
+      [[ -n "$pr_num" ]] && _osc8 "$url" "cutover: $repo — open PR #$pr_num is empty ($url)"
+      continue
+    fi
+
+    # Open the PR if there isn't one yet — needed either to merge it, or just to have
+    # a diff to look at when the commits aren't all mine.
+    if [[ -z "$pr_num" ]]; then
+      url="$(cd "$dir" && gh pr create --base main --head develop --title "cutover" --body "" 2>&1)"
+      url="${url##*$'\n'}"
+      if [[ "$url" != https://* ]]; then
+        echo "cutover: $repo — gh pr create failed: $url"; return 1
+      fi
+      pr_num="${url##*/}"
+      _osc8 "$url" "cutover: $repo — created PR #$pr_num ($ahead commit(s))"
+    else
+      _osc8 "$url" "cutover: $repo — using open PR #$pr_num ($ahead commit(s))"
+    fi
+
+    if [[ "$authors" != slowtacocar ]]; then
+      if (( ! force )); then
+        _osc8 "$url" "cutover: $repo — NOT merging, diff has commits from: $authors — review $url"
+        blocked+=("$repo")
+        continue
+      fi
+      echo "cutover: $repo — -f given, merging despite commits from: $authors"
+    fi
+
+    (cd "$dir" && gh pr ready "$pr_num" >/dev/null 2>&1) || true
+
+    if (cd "$dir" && gh pr merge "$pr_num" --auto "$method" >/dev/null 2>&1); then
+      echo "cutover: $repo — auto-merge enabled on PR #$pr_num"
+    elif (cd "$dir" && gh pr merge "$pr_num" "$method" >/dev/null 2>&1); then
+      # Auto-merge is refused on an already-mergeable PR (nothing to wait for) —
+      # and on repos where the setting is off. Merge it outright.
+      echo "cutover: $repo — merging PR #$pr_num now"
+    else
+      echo "cutover: $repo — gh pr merge failed on PR #$pr_num"; return 1
+    fi
+    prs+=("$dir:$pr_num")
+  done
+
+  if (( ! ${#prs} )); then
+    (( ${#blocked} )) && echo "cutover: nothing merged — review the PR(s) above, then: cutover -f ${blocked[*]}"
+    _wt_tab ""
+    return 1
+  fi
+
+  echo "cutover: waiting for ${#prs} PR(s) to merge…"
+  local entry state mss rd c_failed c_pending label summary
+  typeset -a info remaining=("${prs[@]}") still parts
+  while (( ${#remaining} )); do
+    still=(); parts=()
+    for entry in "${remaining[@]}"; do
+      dir="${entry%%:*}"; pr_num="${entry##*:}"; repo="${dir:t}"
+      info=("${(@f)$(cd "$dir" && gh pr view "$pr_num" --json state,mergeStateStatus,reviewDecision,statusCheckRollup,url -q '
+        .state,
+        (.mergeStateStatus // ""),
+        (.reviewDecision // ""),
+        ([.statusCheckRollup[]? | select(.conclusion=="FAILURE" or .conclusion=="CANCELLED" or .conclusion=="TIMED_OUT" or .state=="FAILURE" or .state=="ERROR")] | length),
+        ([.statusCheckRollup[]? | select(
+            (.status != null and .status != "COMPLETED")
+            or (.state == "PENDING" or .state == "EXPECTED")
+         )] | length),
+        .url
+      ' 2>/dev/null)}")
+      state="${info[1]}"; mss="${info[2]}"; rd="${info[3]}"; c_failed="${info[4]:-0}"; c_pending="${info[5]:-0}"
+      url="${info[6]}"
+
+      case "$state" in
+        MERGED) _osc8 "$url" "cutover: $repo — PR #$pr_num merged into main"; continue ;;
+        CLOSED) echo "cutover: $repo — PR #$pr_num closed without merging"; _wt_tab ""; return 1 ;;
+      esac
+
+      # UPPERCASE = user action required; lowercase = just waiting.
+      if   (( c_failed > 0 ));               then label="CHECKS-FAILED"
+      elif [[ "$mss" == DIRTY ]];            then label="CONFLICTS"
+      elif [[ "$rd"  == CHANGES_REQUESTED ]];then label="REVIEW-CHANGES-REQUESTED"
+      elif [[ "$rd"  == REVIEW_REQUIRED ]];  then label="REVIEW-REQUIRED"
+      elif (( c_pending > 0 ));              then label="checks-pending"
+      elif [[ "$mss" == BLOCKED ]];          then label="BLOCKED"
+      elif [[ "$mss" == CLEAN || "$mss" == UNSTABLE || "$mss" == HAS_HOOKS ]]; then label="ready"
+      else                                        label="${(L)mss:-unknown}"
+      fi
+
+      parts+=("$repo:$label")
+      still+=("$entry")
+    done
+    remaining=("${still[@]}")
+    if (( ${#remaining} )); then
+      summary="cutover ${parts[*]}"
+      _wt_tab "$summary"
+      echo "cutover: $summary"
+      sleep 15
+    fi
+  done
+
+  _wt_tab ""
+  if (( ${#blocked} )); then
+    # Some repos still need eyes on a foreign-commit diff — keep the shell for the rerun.
+    echo "cutover: merged, but still to review: ${blocked[*]} — then: cutover -f ${blocked[*]}"
+    return 1
+  fi
+  echo "cutover: develop is on main for: ${repos[*]}"
+  exit
 }
 
 # _wt_add <src-repo> <worktree-dest> <branch> <fallback-base>
@@ -484,12 +654,19 @@ wtr() {
 }
 
 # wtd <name>: kill a wt-* worktree's tmux session and delete its directory.
-#   - wtd            -> derive the name from the worktree dir you're standing in
-#   - wtd wt-abc123  -> tear down that worktree by name
+#   - wtd               -> derive the name from the worktree dir you're standing in
+#   - wtd wt-abc123     -> tear down that worktree by name
+#   - wtd --keep-shell  -> don't `exit` afterwards (used by `merge` when a cutover is owed)
 wtd() {
   emulate -L zsh
   local wt_root="$HOME/Desktop/repos/worktrees"
-  local name="$1"
+  local name="" keep_shell=0 arg
+  for arg in "$@"; do
+    case "$arg" in
+      --keep-shell) keep_shell=1 ;;
+      *) name="$arg" ;;
+    esac
+  done
   if [[ -z "$name" ]]; then
     if [[ "$PWD/" == "$wt_root/"* ]]; then
       name="${PWD#$wt_root/}"; name="${name%%/*}"
@@ -514,7 +691,7 @@ wtd() {
         && git -C "$sub" worktree remove --force "$sub" 2>/dev/null
     done
     rm -rf "$dest" && echo "wtd: removed $dest"
-    exit
+    (( keep_shell )) || exit 0
   else
     echo "wtd: $dest not found"
   fi
@@ -547,7 +724,7 @@ checkout()   { portless-open customer-checkout }
 adl() {
   cd adl/dbt
   SNOWFLAKE_SCHEMA=adl_dagster_prod dbt parse --target-path target/prod-state
-  dbt run --select $1 --defer --state target/prod-state
+  dbt run --select $@ --defer --state target/prod-state
   cd ../..
 }
 
