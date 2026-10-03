@@ -44,15 +44,15 @@ fi
 alias dbtf=/Users/bgeorge/.local/bin/dbt
 
 # _base_ref <repo-dir> <repo-name> [fallback]
-# The branch a repo's work should branch off and PR back into. api and ship both
-# ship off `develop`, so pin them explicitly rather than trusting origin/HEAD
-# (ship's still points at main). Everything else follows origin/HEAD, falling
+# The branch a repo's work should branch off and PR back into. api, ship and cxp
+# all ship off `develop`, so pin them explicitly rather than trusting origin/HEAD
+# (theirs still points at main). Everything else follows origin/HEAD, falling
 # back to origin/<fallback> when the remote head isn't set locally.
 _base_ref() {
   emulate -L zsh
   local dir="$1" repo="$2" fallback="${3:-main}" base
   case "$repo" in
-    api|ship) echo "origin/develop"; return 0 ;;
+    api|ship|cxp) echo "origin/develop"; return 0 ;;
   esac
   base="$(git -C "$dir" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null)"
   echo "${base:-origin/$fallback}"
@@ -306,7 +306,7 @@ cutover() {
   (( ${#repos} )) || { echo "cutover: usage: cutover [-f] <repo> [repo…]   (e.g. cutover api ship)"; return 1; }
 
   typeset -a prs cmp blocked
-  local repo dir existing ahead authors url pr_num
+  local repo dir existing ahead authors subject title url pr_num
 
   for repo in "${repos[@]}"; do
     dir="$HOME/Desktop/repos/$repo"
@@ -325,9 +325,10 @@ cutover() {
     # commits GitHub can't map to an account.
     cmp=("${(@f)$(cd "$dir" && gh api "repos/{owner}/{repo}/compare/main...develop" --jq '
       .ahead_by,
-      ([.commits[]? | (.author.login // .commit.author.name)] | unique | join(", "))
+      ([.commits[]? | (.author.login // .commit.author.name)] | unique | join(", ")),
+      ((.commits[-1]?.commit.message // "") | split("\n")[0])
     ' 2>/dev/null)}")
-    ahead="${cmp[1]}"; authors="${cmp[2]}"
+    ahead="${cmp[1]}"; authors="${cmp[2]}"; subject="${cmp[3]}"
     [[ "$ahead" == <-> ]] || { echo "cutover: $repo — couldn't compare main...develop"; return 1 }
     if (( ahead == 0 )); then
       echo "cutover: $repo — develop has nothing for main"
@@ -338,7 +339,9 @@ cutover() {
     # Open the PR if there isn't one yet — needed either to merge it, or just to have
     # a diff to look at when the commits aren't all mine.
     if [[ -z "$pr_num" ]]; then
-      url="$(cd "$dir" && gh pr create --base main --head develop --title "cutover" --body "" 2>&1)"
+      # Title the PR after the last commit going in, so the PR list reads as a changelog.
+      title="cutover"; [[ -n "$subject" ]] && title="cutover: $subject"
+      url="$(cd "$dir" && gh pr create --base main --head develop --title "$title" --body "" 2>&1)"
       url="${url##*$'\n'}"
       if [[ "$url" != https://* ]]; then
         echo "cutover: $repo — gh pr create failed: $url"; return 1
@@ -447,7 +450,10 @@ _wt_add() {
   [[ -d "$src/.git" ]] || { echo "wt: $src is not a git repo"; return 1; }
   base="$(_base_ref "$src" "${src:t}" "$fallback")"
   echo "wt: ${src:t} <- fetching $base ..."
-  git -C "$src" fetch origin "${base#origin/}"          || { echo "wt: fetch failed (${src:t})";    return 1; }
+  # Only this one branch: an explicit refspec skips every other remote branch, and
+  # --no-tags stops git pulling in tags that happen to point into its history.
+  git -C "$src" fetch --no-tags origin "+refs/heads/${base#origin/}:refs/remotes/$base" \
+                                                        || { echo "wt: fetch failed (${src:t})";    return 1; }
   git -C "$src" worktree add -b "$branch" "$wt" "$base" || { echo "wt: worktree failed (${src:t})"; return 1; }
 }
 
@@ -598,7 +604,14 @@ wt() {
   if [[ "$repo_arg" != adl ]]; then
     echo "wt: session '$NAME' running in the background -- attach with: wta $NAME"
   fi
-  cd "$DEST"
+  # Single-repo worktrees have one folder under $DEST -- drop straight into it
+  # rather than the wrapper dir. Multi-repo (api + ship) lands at the root.
+  local dirs=("$DEST"/*(N/))
+  if (( ${#dirs} == 1 )); then
+    cd "${dirs[1]}"
+  else
+    cd "$DEST"
+  fi
 }
 
 # wta <name>: attach to a wt-* worktree's (detached) tmux session.
@@ -676,6 +689,17 @@ wtd() {
   fi
   local dest="$wt_root/$name"
 
+  # Stop dev servers before killing the session. tmux kill-session only sends SIGHUP,
+  # which nodemon treats as "restart" rather than "quit", so the api server would
+  # survive as an orphan holding its port. SIGTERM makes nodemon kill its child and exit.
+  if pgrep -qf "$dest/"; then
+    pkill -TERM -f "$dest/"
+    local i
+    for i in {1..20}; do pgrep -qf "$dest/" || break; sleep 0.25; done
+    pgrep -qf "$dest/" && pkill -KILL -f "$dest/"
+    echo "wtd: stopped processes under $dest"
+  fi
+
   if command -v tmux >/dev/null && tmux has-session -t "$name" 2>/dev/null; then
     tmux kill-session -t "$name" && echo "wtd: killed tmux session '$name'"
   fi
@@ -734,3 +758,6 @@ alias c="claude --dangerously-skip-permissions"
 alias cc="claude --dangerously-skip-permissions --continue"
 alias v=nvim
 alias cdr="cd ~/Desktop/repos && cd"
+
+# Machine-local settings and secrets (e.g. NODE_AUTH_TOKEN) -- not tracked.
+[[ -r ~/.zshrc.local ]] && source ~/.zshrc.local

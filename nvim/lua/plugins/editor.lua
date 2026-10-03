@@ -15,6 +15,7 @@ return {
         { "<leader>c", group = "code" },
         { "<leader>t", group = "toggle" },
         { "<leader>S", group = "session" },
+        { "<leader>x", group = "results" },
       },
     },
   },
