@@ -763,3 +763,5 @@ alias cdr="cd ~/Desktop/repos && cd"
 
 # Machine-local settings and secrets (e.g. NODE_AUTH_TOKEN) -- not tracked.
 [[ -r ~/.zshrc.local ]] && source ~/.zshrc.local
+
+alias vm="mosh ubuntu@172.31.103.36 -- tmux a"
