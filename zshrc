@@ -22,6 +22,9 @@ bindkey '^b' zaw-git-branches
 
 export CLICOLOR=1
 
+# Advertise Ghostty's true color support when COLORTERM is absent over SSH.
+[[ "$TERM" == xterm-ghostty ]] && export COLORTERM=truecolor
+
 zstyle ':filter-select' hist-find-no-dups yes
 setopt INC_APPEND_HISTORY
 setopt HIST_IGNORE_DUPS
