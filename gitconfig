@@ -1,7 +1,7 @@
 [user]
 	name = Bobby George
 	email = bobby@fragile.co
-	signingkey = /Users/bgeorge/.ssh/id_ed25519
+	signingkey = ~/.ssh/id_ed25519
 [gpg]
 	format = ssh
 [commit]

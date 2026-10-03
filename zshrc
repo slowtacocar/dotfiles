@@ -33,17 +33,17 @@ setopt HIST_IGNORE_SPACE
 export NODE_OPTIONS=--no-network-family-autoselection
 
 # bun completions
-[ -s "/Users/bgeorge/.bun/_bun" ] && source "/Users/bgeorge/.bun/_bun"
+[ -s "~/.bun/_bun" ] && source "~/.bun/_bun"
 
 # bun
 export BUN_INSTALL="$HOME/.bun"
 export PATH="$BUN_INSTALL/bin:$PATH"
 # Added by dbt Fusion extension (ensure dbt binary dir on PATH)
-if [[ ":$PATH:" != *":/Users/bgeorge/.local/bin:"* ]]; then
-  export PATH=/Users/bgeorge/.local/bin:"$PATH"
+if [[ ":$PATH:" != *":~/.local/bin:"* ]]; then
+  export PATH=~/.local/bin:"$PATH"
 fi
 # Added by dbt Fusion extension
-alias dbtf=/Users/bgeorge/.local/bin/dbt
+alias dbtf=~/.local/bin/dbt
 
 # _base_ref <repo-dir> <repo-name> [fallback]
 # The branch a repo's work should branch off and PR back into. api, ship and cxp
