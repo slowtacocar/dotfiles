@@ -26,6 +26,11 @@ export CLICOLOR=1
 [[ "$TERM" == xterm-ghostty ]] && export COLORTERM=truecolor
 
 zstyle ':filter-select' hist-find-no-dups yes
+
+# Keep command history across shell sessions.
+HISTFILE="$HOME/.zsh_history"
+HISTSIZE=100000
+SAVEHIST=100000
 setopt INC_APPEND_HISTORY
 setopt HIST_IGNORE_DUPS
 setopt HIST_IGNORE_SPACE
