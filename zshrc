@@ -765,3 +765,7 @@ alias cdr="cd ~/Desktop/repos && cd"
 [[ -r ~/.zshrc.local ]] && source ~/.zshrc.local
 
 alias vm="mosh ubuntu@172.31.103.36 -- tmux a"
+
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
