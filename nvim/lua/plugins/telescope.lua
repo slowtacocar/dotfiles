@@ -6,6 +6,8 @@ return {
   cmd = "Telescope",
   dependencies = {
     "nvim-lua/plenary.nvim",
+    -- Send picker results to the persistent Trouble sidebar (<C-q>).
+    "folke/trouble.nvim",
     -- Native fzf sorter for much faster matching (built with make).
     { "nvim-telescope/telescope-fzf-native.nvim", build = "make" },
     -- Route vim.ui.select through Telescope (e.g. LSP code actions).
@@ -32,14 +34,24 @@ return {
   },
   opts = function()
     local actions = require("telescope.actions")
+    -- Park the whole result set in the Trouble sidebar so it survives the
+    -- picker closing and tracks which hit you're on.
+    local to_trouble = function(...)
+      return require("trouble.sources.telescope").open(...)
+    end
     return {
       defaults = {
         mappings = {
           i = {
             ["<C-j>"] = actions.move_selection_next,
             ["<C-k>"] = actions.move_selection_previous,
-            ["<C-q>"] = actions.send_to_qflist + actions.open_qflist,
+            ["<C-q>"] = to_trouble,
+            ["<C-Q>"] = actions.send_to_qflist + actions.open_qflist, -- plain quickfix
             ["<Esc>"] = actions.close, -- single Esc closes from insert
+          },
+          n = {
+            ["<C-q>"] = to_trouble,
+            ["<C-Q>"] = actions.send_to_qflist + actions.open_qflist,
           },
         },
         path_display = { "truncate" },

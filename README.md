@@ -1,6 +1,6 @@
 # dotfiles
 
-Personal configs: zsh, tmux, neovim.
+Personal configs: zsh (+ powerlevel10k), tmux, neovim.
 
 ## Setup
 

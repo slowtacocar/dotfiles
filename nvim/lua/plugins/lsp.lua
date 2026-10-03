@@ -1,18 +1,18 @@
 -- Language servers via Neovim's native LSP (nvim 0.11+ vim.lsp.config/enable).
 -- nvim-lspconfig is used only for the server *definitions* it ships in lsp/*.lua
--- (tsgo, oxlint, ...); we activate them with vim.lsp.enable().
+-- (tsc, oxlint, ...); we activate them with vim.lsp.enable().
 return {
   "neovim/nvim-lspconfig",
   event = { "BufReadPre", "BufNewFile" },
   dependencies = { "saghen/blink.cmp" },
   config = function()
     -- Give every server blink.cmp's completion capabilities, and pin the
-    -- position encoding so tsgo and oxlint agree (otherwise position requests
+    -- position encoding so tsc and oxlint agree (otherwise position requests
     -- like gd/hover warn about "multiple different client offset_encodings").
     local capabilities = require("blink.cmp").get_lsp_capabilities()
     capabilities.offsetEncoding = { "utf-16" }
     -- Debounce didChange notifications (default 150ms). Neovim triggers pull
-    -- diagnostics off didChange, so this also throttles how often oxlint/tsgo
+    -- diagnostics off didChange, so this also throttles how often oxlint/tsc
     -- re-lint while typing. NOTE: with multiple clients on a buffer the SMALLEST
     -- debounce wins, so this must be global ("*") to actually take effect.
     vim.lsp.config("*", {
@@ -43,11 +43,11 @@ return {
       })
     end
 
-    -- TS/JS: tsgo (types) + oxlint (lint/fix) + oxfmt (format).
+    -- TS/JS: tsc (types) + oxlint (lint/fix) + oxfmt (format).
     -- Python: ty (types) + ruff (lint/fix/format).
     -- oxfmt keeps its shipped behavior (workspace_required: attaches only when
     -- it finds an oxfmt config — which this user always has).
-    for _, s in ipairs({ "tsgo", "oxlint", "ruff", "ty", "oxfmt" }) do
+    for _, s in ipairs({ "tsc", "oxlint", "ruff", "ty", "oxfmt" }) do
       file_only(s)
     end
 
@@ -84,7 +84,7 @@ return {
       end,
     })
 
-    vim.lsp.enable({ "tsgo", "oxlint", "ruff", "ty", "oxfmt", "dbt" })
+    vim.lsp.enable({ "tsc", "oxlint", "ruff", "ty", "oxfmt", "dbt" })
 
     -- Format + fix on save through the already-running servers (no per-save
     -- process spawn — replaces conform). Toggle with <leader>tf.
@@ -166,9 +166,14 @@ return {
 
         -- Highlight other references to the symbol under the cursor (like
         -- VSCode). CursorHold fires after 'updatetime' (250ms); moving clears.
+        -- NORMAL MODE ONLY: documentHighlight is a request, and every request
+        -- flushes the debounced didChange (Client:request -> changetracking.flush).
+        -- On CursorHoldI that meant every 250ms pause while typing pushed a
+        -- didChange to the TS server plus the pull-diagnostics and semantic-token
+        -- refresh that ride on it, defeating debounce_text_changes above.
         if client and client:supports_method("textDocument/documentHighlight") then
           local hl = vim.api.nvim_create_augroup("user-lsp-doc-highlight-" .. bufnr, { clear = true })
-          vim.api.nvim_create_autocmd({ "CursorHold", "CursorHoldI" }, {
+          vim.api.nvim_create_autocmd("CursorHold", {
             group = hl,
             buffer = bufnr,
             callback = vim.lsp.buf.document_highlight,
