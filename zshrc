@@ -5,7 +5,7 @@ if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]
   source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
 fi
 
-curl -L git.io/antigen > .antigen.zsh
+curl -L -s git.io/antigen > .antigen.zsh
 source .antigen.zsh
 
 antigen theme romkatv/powerlevel10k
