@@ -1,0 +1,23 @@
+[user]
+	name = Bobby George
+	email = bobby@fragile.co
+	signingkey = /Users/bgeorge/.ssh/id_ed25519
+[gpg]
+	format = ssh
+[commit]
+	gpgsign = true
+[push]
+	autoSetupRemote = true
+[core]
+	pager = delta
+	fsmonitor = true
+	untrackedCache = true
+[interactive]
+	diffFilter = delta --color-only
+[delta]
+	navigate = true
+	dark = true
+	side-by-side = true
+	pager = less -R --mouse --wheel-lines=3
+[merge]
+	conflictStyle = zdiff3

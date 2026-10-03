@@ -27,4 +27,5 @@ link() {
 link "$REPO_DIR/zshrc"     "$HOME/.zshrc"
 link "$REPO_DIR/tmux.conf" "$HOME/.tmux.conf"
 link "$REPO_DIR/p10k.zsh"  "$HOME/.p10k.zsh"
+link "$REPO_DIR/gitconfig" "$HOME/.gitconfig"
 link "$REPO_DIR/nvim"      "$HOME/.config/nvim"
