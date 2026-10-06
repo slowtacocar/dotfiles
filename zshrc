@@ -764,7 +764,7 @@ adl() {
 alias rebase="git fetch && git rebase origin/HEAD && git push --force-with-lease"
 alias gdiff="git diff origin/HEAD"
 alias c="codex --dangerously-bypass-approvals-and-sandbox"
-alias cc="codex resume --dangerously-skip-permissions"
+alias cc="codex resume --dangerously-bypass-approvals-and-sandbox"
 alias v=nvim
 alias cdr="cd ~/Desktop/repos && cd"
 
