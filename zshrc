@@ -5,7 +5,7 @@ if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]
   source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
 fi
 
-[ -e "~/.antigen.zsh" ] || curl -L -s git.io/antigen > ~/.antigen.zsh
+[ -e "$HOME/.antigen.zsh" ] || curl -L -s git.io/antigen > ~/.antigen.zsh
 source ~/.antigen.zsh
 
 antigen theme romkatv/powerlevel10k
@@ -763,8 +763,8 @@ adl() {
 
 alias rebase="git fetch && git rebase origin/HEAD && git push --force-with-lease"
 alias gdiff="git diff origin/HEAD"
-alias c="claude --dangerously-skip-permissions"
-alias cc="claude --dangerously-skip-permissions --continue"
+alias c="codex --dangerously-bypass-approvals-and-sandbox"
+alias cc="codex resume --dangerously-skip-permissions"
 alias v=nvim
 alias cdr="cd ~/Desktop/repos && cd"
 
