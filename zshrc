@@ -771,7 +771,7 @@ alias cdr="cd ~/Desktop/repos && cd"
 # Machine-local settings and secrets (e.g. NODE_AUTH_TOKEN) -- not tracked.
 [[ -r ~/.zshrc.local ]] && source ~/.zshrc.local
 
-alias vm="mosh bobby-devserver -- tmux new -As tabs"
+alias vm="ssh bobby-devserver -t 'tmux new -As tabs'"
 alias rdp="xfreerdp /v:bobby-devserver"
 
 export NVM_DIR="$HOME/.nvm"
