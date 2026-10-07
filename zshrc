@@ -818,7 +818,7 @@ export NVM_DIR="$HOME/.nvm"
 # add Pulumi to the PATH
 export PATH=$PATH:$HOME/.pulumi/bin
 
-alias cme="kinit bgeorge@INT.BOBBYGEORGE.DEV && ssh -t cme-devserver01.int.bobbygeorge.dev tmux new -As tabs"
+alias cme="kinit bgeorge@INT.BOBBYGEORGE.DEV && ssh -t cme-devserver01.int.bobbygeorge.dev tmux -u new -As tabs"
 
 alias k="kubectl"
 alias watchk="watch kubectl"
