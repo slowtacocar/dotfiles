@@ -817,3 +817,42 @@ export NVM_DIR="$HOME/.nvm"
 
 # add Pulumi to the PATH
 export PATH=$PATH:$HOME/.pulumi/bin
+
+alias cme="kinit bgeorge@INT.BOBBYGEORGE.DEV && ssh -t cme-devserver01.int.bobbygeorge.dev tmux new -As tabs"
+
+alias k="kubectl"
+alias watchk="watch kubectl"
+kexec() {
+        kubectl exec -ti "$1" -- bash
+}
+
+compctl -K _kexec_pods kexec
+_kexec_pods() {
+  reply=($(kubectl get pods --no-headers -o custom-columns=":metadata.name" 2>/dev/null))
+}
+
+function zaw-src-kubectl-context() {
+    candidates=($(kubectl config get-contexts -o name))
+    actions=(kubectl-context)
+}
+
+function kubectl-context(){
+    BUFFER="kubectl config use-context $1"
+    zle accept-line
+}
+
+zaw-register-src -n kubectl-context zaw-src-kubectl-context
+bindkey '^k' zaw-kubectl-context
+
+function zaw-src-kubectl-namespace() {
+    candidates=($(kubectl get namespace --no-headers -o custom-columns=":metadata.name"))
+    actions=(kubectl-namespace)
+}
+
+function kubectl-namespace(){
+    BUFFER="kubectl config set-context --current --namespace=$1"
+    zle accept-line
+}
+
+zaw-register-src -n kubectl-namespace zaw-src-kubectl-namespace
+bindkey '^l' zaw-kubectl-namespace
