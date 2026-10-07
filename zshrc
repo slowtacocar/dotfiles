@@ -709,11 +709,12 @@ wtd() {
   # Stop dev servers before killing the session. tmux kill-session only sends SIGHUP,
   # which nodemon treats as "restart" rather than "quit", so the api server would
   # survive as an orphan holding its port. SIGTERM makes nodemon kill its child and exit.
-  if pgrep -qf "$dest/"; then
+  # Redirect output instead of using -q, which is not portable across pgrep versions.
+  if pgrep -f "$dest/" >/dev/null; then
     pkill -TERM -f "$dest/"
     local i
-    for i in {1..20}; do pgrep -qf "$dest/" || break; sleep 0.25; done
-    pgrep -qf "$dest/" && pkill -KILL -f "$dest/"
+    for i in {1..20}; do pgrep -f "$dest/" >/dev/null || break; sleep 0.25; done
+    pgrep -f "$dest/" >/dev/null && pkill -KILL -f "$dest/"
     echo "wtd: stopped processes under $dest"
   fi
 
