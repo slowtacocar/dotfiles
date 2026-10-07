@@ -507,6 +507,13 @@ _wt_session() {
       fi
     done
     tmux select-window -t "${name}:shell"
+  elif [[ -d "$dest/rms" ]]; then
+    ###### single repo: rms ######
+    tmux new-session -d -s "$name" -n shell -c "$dest/rms"
+    tmux new-window -t "$name" -n rms -c "$dest/rms"
+    tmux send-keys -t "${name}:rms" 'bun install && bunx portless run --name rms bun run dev' C-m
+    tmux select-window -t "${name}:shell"
+    echo "wt: rms -> https://$name.rms.localhost"
   elif [[ -d "$dest/adl" ]]; then
     ###### single repo: adl -- one-shot dep install, no dev server ######
     # Nothing to keep running afterwards, so the install tab `exit`s itself and
@@ -531,6 +538,7 @@ _wt_session() {
 #   - wt <repo>   -> a single worktree of ~/Desktop/repos/<repo>:
 #                       * cxp: `bun install && bun dev` in its frontend/ and api/
 #                              subfolders, each in its own tab.
+#                       * rms: `bun install`, then `bun run dev` under portless.
 #                       * adl: copies the root repo's gitignored adl/dbt/.env in,
 #                              then `uv venv && uv pip sync setup.py` in a tmux tab
 #                              that exits (ending the session) once it's done.
@@ -730,9 +738,11 @@ wtd() {
   fi
 }
 
-# Open a ship app's portless URL for the worktree you're currently in.
+# Open an app's portless URL for the worktree you're currently in.
 # In a `wt` worktree the url is https://<branch>.<app>.localhost, where the
 # branch == the worktree folder name; outside one it falls back to https://<app>.localhost.
+# With PORTLESS_TAILSCALE=1, open the matching route's shared URL instead.
+# Try the local opener; over SSH or on failure, print a clickable OSC 8 link.
 portless-open() {
   emulate -L zsh
   local app="$1"
@@ -747,12 +757,39 @@ portless-open() {
   else
     url="https://${app}.localhost"
   fi
-  echo "opening $url"
-  open "$url"
+  if [[ "${PORTLESS_TAILSCALE:-}" == 1 ]]; then
+    local routes hostname="${url#https://}"
+    if (( $+commands[portless] )); then
+      routes=$(NO_COLOR=1 FORCE_COLOR=0 portless list) || return
+    else
+      routes=$(NO_COLOR=1 FORCE_COLOR=0 bunx portless list) || return
+    fi
+    url=$(print -r -- "$routes" | awk -v hostname="$hostname" '
+      $2 == "->" {
+        host = $1
+        sub(/^https?:\/\//, "", host)
+        sub(/:[0-9]+$/, "", host)
+        matched = (host == hostname)
+      }
+      matched && ($1 == "tailscale:" || $1 == "funnel:") {
+        print $2
+        exit
+      }
+    ')
+    if [[ -z "$url" ]]; then
+      print -u2 "portless-open: no Tailscale URL for $hostname; start the app with PORTLESS_TAILSCALE=1"
+      return 1
+    fi
+  fi
+  if [[ -z "${SSH_CONNECTION:-}${SSH_CLIENT:-}${SSH_TTY:-}" ]] && open "$url" 2>/dev/null; then
+    return 0
+  fi
+  _osc8 "$url" "Cmd-click to open: $url"
 }
 bo() { portless-open support-portal }
 portal()     { portless-open customer-portal }
 checkout()   { portless-open customer-checkout }
+rms()        { portless-open rms }
 
 adl() {
   cd adl/dbt
@@ -777,3 +814,6 @@ alias rdp="xfreerdp /v:bobby-devserver"
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
 [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
+
+# add Pulumi to the PATH
+export PATH=$PATH:$HOME/.pulumi/bin

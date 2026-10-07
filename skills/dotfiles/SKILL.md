@@ -49,6 +49,8 @@ or dev-server startup has finished. Inspect logs without attaching:
 - `wt` creates **both api and ship** with environment setup and dev servers.
 - `wt cxp` creates CXP, copies its API/frontend env files and local auth keys,
   installs Bun dependencies once, and runs `bun dev` in each workspace.
+- `wt rms` installs Bun dependencies and runs `bun run dev` under Portless in
+  its own tmux window, at `https://<worktree-name>.rms.localhost`.
 - `wt adl` copies `adl/dbt/.env`, creates a venv, and runs
   `uv pip sync constraints-dev.txt` in a temporary tmux session. That session
   exits after a successful install; there is no persistent dev server.
@@ -71,7 +73,13 @@ Both infer the name when run inside a worktree.
 
 Inside a worktree, `bo`, `portal`, and `checkout` open the corresponding
 `https://<worktree-name>.<app>.localhost` URL. `bo` maps to `support-portal`.
-Outside a worktree they omit the worktree prefix.
+Outside a worktree they omit the worktree prefix. `rms` opens
+`https://<worktree-name>.rms.localhost`, or `https://rms.localhost` outside a
+worktree. With `PORTLESS_TAILSCALE=1`, these shortcuts look up the matching
+app's shared Tailscale URL in `portless list` and fail if none is available.
+They try `open` locally and fall back to an OSC 8 hyperlink if it fails or is
+unavailable. Over SSH they print the hyperlink directly: Cmd-click it in
+Ghostty to open it on the client Mac.
 
 ## Dev servers and process management
 
