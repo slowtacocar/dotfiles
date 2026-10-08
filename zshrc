@@ -578,14 +578,13 @@ wt() {
     local f rel
     while IFS= read -r f; do
       rel="${f#$SHIP_SRC/}"
-      mkdir -p "$SHIP_WT/${rel:h}"
-      cp "$f" "$SHIP_WT/$rel"
+      mkdir -p "$SHIP_WT/${rel:h}" || return 1
+      # Rewrite while copying: avoids incompatible BSD/GNU sed -i syntax.
+      sed -E "s#https?://localhost:3000#$API_URL#g" "$f" > "$SHIP_WT/$rel" || {
+        echo "wt: failed to rewrite API URL in $SHIP_WT/$rel" >&2
+        return 1
+      }
     done < <(find "$SHIP_SRC/apps" -name .env.local -type f)
-
-    # Point ship's API url at the api worktree's portless url.
-    while IFS= read -r f; do
-      sed -i '' -E "s#https?://localhost:3000#$API_URL#g" "$f"
-    done < <(find "$SHIP_WT/apps" -name .env.local -type f)
 
     # tmux: build the dev session (shared with `wtr`).
     _wt_session "$NAME" "$DEST"
