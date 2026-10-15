@@ -20,6 +20,12 @@ return {
       flags = { debounce_text_changes = 1000 },
     })
 
+    -- Type-aware oxlint runs a second TypeScript analysis engine. In large
+    -- projects it backed up diagnostics for 19–29s and code actions for 13.6s.
+    -- Keep editor linting lightweight; the project's CLI lint still runs all
+    -- configured rules, and tsc continues providing live type diagnostics.
+    vim.lsp.config("oxlint", { settings = { typeAware = false } })
+
     -- Don't let servers attach to non-file buffers (e.g. diffview's
     -- `diffview://` revision buffers) — they have no valid workspace path and
     -- crash the server with "workspace URI is not a valid file path: file://.".
