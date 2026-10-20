@@ -52,6 +52,11 @@ fi
 # Added by dbt Fusion extension
 alias dbtf=~/.local/bin/dbt
 
+# Copy stdin to the terminal clipboard using OSC 52.
+osccp() {
+  printf '\033]52;c;%s\a' "$(base64 | tr -d '\n')"
+}
+
 # _base_ref <repo-dir> <repo-name> [fallback]: use the remote default branch.
 _base_ref() {
   emulate -L zsh
