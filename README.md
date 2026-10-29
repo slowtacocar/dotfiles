@@ -25,6 +25,14 @@ After editing `tmux.conf`, apply changes to running sessions with:
 tmux source-file ~/.tmux.conf
 ```
 
+## Neovim images
+
+`image.nvim` displays inline Markdown images and previews image files opened
+directly in Neovim. It uses the Kitty graphics protocol (use Kitty or Ghostty)
+and the ImageMagick CLI (`brew install imagemagick` on macOS or
+`sudo dnf install ImageMagick` on Fedora). No LuaRocks setup is needed.
+The tmux config enables graphics passthrough; tmux 3.3 or newer is required.
+
 ## Neovim performance profiling
 
 Run `:LspProfileStart` and reproduce the slowdown for 30 seconds. The capture
